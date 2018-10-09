@@ -11,6 +11,8 @@ import htsjdk.variant.variantcontext.VariantContextBuilder;
 import org.broadinstitute.hellbender.cmdline.CommandLineProgram;
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.testutils.FuncotatorReferenceTestUtils;
+import org.broadinstitute.hellbender.tools.copynumber.utils.annotatedinterval.AnnotatedInterval;
+import org.broadinstitute.hellbender.tools.funcotator.AnnotatedIntervalToSegmentVariantContextConverter;
 import org.broadinstitute.hellbender.tools.funcotator.DataSourceFuncotationFactory;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.GencodeFuncotation;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.GencodeFuncotationBuilder;
@@ -20,15 +22,19 @@ import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfFeature;
 import org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfFeatureBaseData;
 import org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfTranscriptFeature;
+import org.broadinstitute.hellbender.utils.io.IOUtils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 import org.broadinstitute.hellbender.utils.reference.ReferenceBases;
+import org.broadinstitute.hellbender.utils.tsv.TableReader;
+import org.broadinstitute.hellbender.utils.tsv.TableUtils;
+import org.testng.Assert;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class FuncotatorTestUtils {
     private FuncotatorTestUtils() {}
@@ -292,5 +298,94 @@ public class FuncotatorTestUtils {
                         Collections.emptyList(),
                         null)
         );
+    }
+
+    public static TableReader<LinkedHashMap<String, String>> createLinkedHashMapListTableReader(final File inputFile) throws IOException {
+        return TableUtils.reader(inputFile.toPath(),
+                (columns, exceptionFactory) ->
+                        (dataLine) -> {
+                            final int columnCount = columns.names().size();
+                            return IntStream.range(0, columnCount).boxed().collect(Collectors.toMap(i -> columns.names().get(i),
+                                    dataLine::get,
+                                    (x1, x2) -> {
+                                        throw new IllegalArgumentException("Should not be able to have duplicate field names.");
+                                    },
+                                    LinkedHashMap::new));
+                        }
+        );
+    }
+
+    /**
+     * Create a very simple dummy variant context that adheres to the conventions in
+     * {@link AnnotatedIntervalToSegmentVariantContextConverter#convert(AnnotatedInterval, ReferenceContext)}
+     *
+     * @return Never {@code null}
+     */
+    public static VariantContext createDummySegmentVariantContext() {
+        return createSimpleVariantContext(FuncotatorReferenceTestUtils.retrieveHg19Chr3Ref(),
+                "3", 2100000, 3200000, "T",
+                AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE.getDisplayString());
+    }
+
+    /**
+     * See {@link FuncotatorTestUtils#createDummySegmentVariantContext()}, but this allows caller to specify attributes
+     *   to add.
+     *
+     * @param attributes Never {@code null}
+     * @return Never {@code null}
+     */
+    public static VariantContext createDummySegmentVariantContextWithAttributes(final Map<String, String> attributes) {
+        Utils.nonNull(attributes);
+        return new VariantContextBuilder(createSimpleVariantContext(FuncotatorReferenceTestUtils.retrieveHg19Chr3Ref(),
+                "3", 2100000, 3200000, "T",
+                AnnotatedIntervalToSegmentVariantContextConverter.COPY_NEUTRAL_ALLELE.getDisplayString()))
+                .attributes(attributes).make();
+    }
+
+    /**
+     * Make sure that the tsv file written exactly matches the linked hashmap.  This includes the field ordering is the same as well.
+     *
+     * @param testFile Must be a readable file.
+     * @param gtOutputRecords a list of linked hashmaps.  Each hashmap representing one row in the tsv.
+     * @throws IOException if the file reader cannot be created.
+     */
+    public static void assertTsvFile(final File testFile, final List<LinkedHashMap<String, String>> gtOutputRecords) throws IOException {
+        Utils.nonNull(gtOutputRecords);
+        IOUtils.assertFileIsReadable(testFile.toPath());
+        final TableReader<LinkedHashMap<String, String>> outputReader = createLinkedHashMapListTableReader(testFile);
+
+        // Check that the ordering of the column is correct.
+        final List<LinkedHashMap<String,String>> outputRecords = outputReader.toList();
+        assertLinkedHashMapsEqual(outputRecords, gtOutputRecords);
+    }
+
+    /**
+     * Assert that the key, values are all the same (including ordering) b/w two linked hashmaps.
+     * @param guess Never {@code null}
+     * @param gt Ground truth/expected.  Never {@code null}
+     * @param <T> key class
+     * @param <U> value class
+     */
+    public static <T, U> void assertLinkedHashMapsEqual(final LinkedHashMap<T, U> guess, final LinkedHashMap<T, U> gt) {
+        Utils.nonNull(guess);
+        Utils.nonNull(gt);
+
+        // Since these are linked hash maps, the tests below should also de facto test that the ordering is correct.
+        Assert.assertEquals(new ArrayList<>(guess.keySet()), new ArrayList<>(gt.keySet()));
+        Assert.assertEquals(new ArrayList<>(guess.values()), new ArrayList<>(gt.values()));
+    }
+
+    /**
+     * Same as {@link FuncotatorTestUtils#assertLinkedHashMapsEqual(LinkedHashMap, LinkedHashMap)}, but for bulk
+     * assertions.  The lists must have corresponding entries.
+     * @param guesses Never {@code null}
+     * @param groundTruths Never {@code null}
+     * @param <T> key class
+     * @param <U> value class
+     */
+    private static <T, U> void assertLinkedHashMapsEqual(final List<LinkedHashMap<T, U>> guesses, final List<LinkedHashMap<T, U>> groundTruths) {
+        Utils.nonNull(guesses);
+        Utils.nonNull(groundTruths);
+        IntStream.range(0, guesses.size()).boxed().forEach(i -> assertLinkedHashMapsEqual(guesses.get(i), groundTruths.get(i)));
     }
 }

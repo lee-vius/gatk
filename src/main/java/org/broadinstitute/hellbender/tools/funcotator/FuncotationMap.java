@@ -1,10 +1,13 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
+import com.google.common.annotations.VisibleForTesting;
 import htsjdk.variant.variantcontext.Allele;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.exceptions.GATKException;
+import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.TableFuncotation;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.GencodeFuncotation;
 import org.broadinstitute.hellbender.tools.funcotator.vcfOutput.VcfOutputRenderer;
@@ -41,7 +44,7 @@ public class FuncotationMap {
      * @param transcriptId the specified transcript ID.  Use {@see NO_TRANSCRIPT_AVAILABLE_KEY} if there are no transcripts.  Never {@code null}
      * @return A list of the Gencode Funcotations only. Empty list, if nothing found.  Never {@code null}
      */
-    public List<GencodeFuncotation> getGencodeFuncotations(final String transcriptId) {
+    List<GencodeFuncotation> getGencodeFuncotations(final String transcriptId) {
         Utils.nonNull(transcriptId);
         return txToFuncotations.getOrDefault(transcriptId, new LinkedHashSet<>()).stream()
                 .filter(FuncotatorUtils::isGencodeFuncotation).map(f-> (GencodeFuncotation) f).collect(Collectors.toList());
@@ -69,26 +72,27 @@ public class FuncotationMap {
         Utils.nonNull(transcriptId);
         Utils.nonNull(fieldName);
         Utils.nonNull(allele);
-        final List<String> values = txToFuncotations.getOrDefault(transcriptId, new LinkedHashSet<>()).stream()
+        final Set<String> values = txToFuncotations.getOrDefault(transcriptId, new LinkedHashSet<>()).stream()
                 .filter(f -> f.hasField(fieldName))
                 .filter(f -> f.getAltAllele().equals(allele))
                 .map(f -> f.getField(fieldName))
-                .collect(Collectors.toList());
+                .collect(Collectors.toSet());
         if (values.size() > 1) {
-            throw new GATKException.ShouldNeverReachHereException("Found more than one value for " + transcriptId + ", "
-                    + allele + ", " + fieldName);
+            throw new UserException.BadInput("Found more than one unique value for " + transcriptId + ", "
+                    + allele + ", " + fieldName + ": " + values.stream().collect(Collectors.joining(", ")));
         }
         if (values.size() == 0) {
             return null;
         } else {
-            return values.get(0);
+            return values.iterator().next();
         }
     }
 
     /**
      * @return An empty FuncotationMap.  Never {@code null}
      */
-    private static FuncotationMap createEmpty() {
+    @VisibleForTesting
+    public static FuncotationMap createEmpty() {
         return new FuncotationMap();
     }
 
@@ -173,7 +177,8 @@ public class FuncotationMap {
      *
      * @return Never {@code null}
      */
-    public LinkedHashSet<String> getTranscriptSet() {
+    @VisibleForTesting
+    LinkedHashSet<String> getTranscriptSet() {
         return new LinkedHashSet<>(txToFuncotations.keySet());
     }
 
@@ -228,5 +233,80 @@ public class FuncotationMap {
 
     private static boolean areDuplicateTranscriptIDsFound(final List<GencodeFuncotation> gencodeFuncotations) {
         return gencodeFuncotations.size() != new HashSet<>(gencodeFuncotations).size();
+    }
+
+    /**
+     * Get all field names found in the funcotations for the given transcript ID.
+     *
+     * @param transcriptId transcript ID.  Never {@code null}
+     * @return Field names in the funcotations.  Empty set if no funcotations (or funcotations have no fields).
+     * Never {@code null}
+     */
+    public Set<String> getFieldNames(final String transcriptId) {
+        Utils.nonNull(transcriptId);
+
+        final LinkedHashSet<Funcotation> funcotations =  txToFuncotations.getOrDefault(transcriptId, new LinkedHashSet<>());
+        return funcotations.stream().map(f -> f.getFieldNames()).flatMap(s -> s.stream()).collect(Collectors.toSet());
+    }
+
+    /**
+     * See {@link FuncotationMap#getFieldNames(String)}, but this returns field names for all transcripts and all alleles.
+     * @return  See {@link FuncotationMap#getFieldNames(String)}
+     */
+    private Set<String> getFieldNames() {
+        final List<String> txIds = getTranscriptList();
+        final Set<String> result = new HashSet<>();
+        txIds.forEach(txId -> result.addAll(getFieldNames(txId)));
+        return result;
+    }
+
+    /**
+     * See {@link FuncotationMap#getFieldNames(String)}, but this returns field names for a single transcripts and a
+     *  single allele.
+     * @param transcriptId See {@link FuncotationMap#getFieldNames(String)}
+     * @param allele Never {@code null}
+     * @return See {@link FuncotationMap#getFieldNames(String)}
+     */
+    private Set<String> getFieldNames(final String transcriptId, final Allele allele) {
+        Utils.nonNull(transcriptId);
+        Utils.nonNull(allele);
+
+        final LinkedHashSet<Funcotation> funcotations =  txToFuncotations.getOrDefault(transcriptId, new LinkedHashSet<>());
+        return funcotations.stream()
+                .filter(f -> f.getAltAllele().equals(allele))
+                .map(f -> f.getFieldNames())
+                .flatMap(s -> s.stream()).collect(Collectors.toSet());
+    }
+
+    /**
+     * Get all the alleles in all of the funcotations for a given transcript ID.
+     *
+     * @param transcriptId Never {@code null}
+     * @return a set of alleles that are contained in all funcotations associated with the given transcriptId.  Never {@code null}
+     * Will return empty list if there are no funcotations associated with the given transcriptId.
+     */
+    public Set<Allele> getAlleles(final String transcriptId) {
+        final LinkedHashSet<Funcotation> funcotations =  txToFuncotations.getOrDefault(transcriptId, new LinkedHashSet<>());
+        return funcotations.stream().map(f -> f.getAltAllele()).collect(Collectors.toSet());
+    }
+
+    /**
+     * @return whether all transcript-allele combinations have the same fields in the corresponding funcotations.
+     */
+    public boolean doAllTxAlleleCombinationsHaveTheSameFields() {
+
+        // First get every field seen in this funcotation map.
+        final Set<String> allFields = getFieldNames();
+
+        // Then get all txIds
+        final List<String> txIds = getTranscriptList();
+
+        final List<Pair<String,Allele>> txAlleleCombos = new ArrayList<>();
+        for (final String txId : txIds) {
+            getAlleles(txId).forEach(a -> txAlleleCombos.add(Pair.of(txId, a)));
+        }
+
+        // For each transcript-allele combo, get the fields
+        return txAlleleCombos.stream().allMatch(p -> getFieldNames(p.getLeft(), p.getRight()).equals(allFields));
     }
 }

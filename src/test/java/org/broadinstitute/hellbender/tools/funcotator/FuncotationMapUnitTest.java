@@ -1,6 +1,8 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.Sets;
 import htsjdk.tribble.AbstractFeatureReader;
 import htsjdk.tribble.CloseableTribbleIterator;
 import htsjdk.tribble.Feature;
@@ -728,5 +730,152 @@ public class FuncotationMapUnitTest extends GATKBaseTest {
         Assert.assertEquals(transcriptId, FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY);
         Assert.assertEquals(funcotationMap.get(transcriptId), funcotations);
         Assert.assertEquals(funcotationMap.getGencodeFuncotations(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY).size(), 0);
+    }
+
+    @DataProvider
+    public Object[][] provideGetFieldNames() {
+        final List<String> baseFieldNameList = Arrays.asList("FIELD1", "FIELD2");
+        final List<String> baseFieldNameList2 = Arrays.asList("FIELD3", "FIELD4");
+        final List<String> baseFieldNameList3 = Arrays.asList("FIELD5", "FIELD6");
+        final List<String> baseFieldNameList4 = Arrays.asList("FIELD7", "FIELD8");
+
+        final List<Funcotation> singleFuncotation = Collections.singletonList(
+                TableFuncotation.create(
+                        baseFieldNameList4,
+                        createFieldValuesFromNameList("A", baseFieldNameList4),
+                        Allele.create("C"),
+                        GencodeFuncotationFactory.DEFAULT_NAME, null
+                )
+        );
+
+        final List<Funcotation> threeFuncotations1 = Arrays.asList(
+                TableFuncotation.create(
+                        baseFieldNameList,
+                        createFieldValuesFromNameList("E", baseFieldNameList),
+                        Allele.create("A"),
+                        "TestDataSource5", null
+                ),
+                TableFuncotation.create(
+                        baseFieldNameList2,
+                        createFieldValuesFromNameList("F", baseFieldNameList2),
+                        Allele.create("AG"),
+                        "TestDataSource5", null
+                ),
+                TableFuncotation.create(
+                        baseFieldNameList3,
+                        createFieldValuesFromNameList("G", baseFieldNameList3),
+                        Allele.create("AT"),
+                        "TestDataSource5", null
+                )
+        );
+
+        final List<Funcotation> threeFuncotations2 = Arrays.asList(
+                TableFuncotation.create(
+                        baseFieldNameList,
+                        createFieldValuesFromNameList("H", baseFieldNameList),
+                        Allele.create("A"),
+                        "TestDataSource5", null
+                ),
+                TableFuncotation.create(
+                        baseFieldNameList2,
+                        createFieldValuesFromNameList("I", baseFieldNameList2),
+                        Allele.create("AG"),
+                        "TestDataSource5", null
+                ),
+                TableFuncotation.create(
+                        baseFieldNameList3,
+                        createFieldValuesFromNameList("J", baseFieldNameList3),
+                        Allele.create("AT"),
+                        "TestDataSource5", null
+                )
+        );
+
+        final List<Funcotation> threeFuncotationsSameFieldsDifferentAlleles = Arrays.asList(
+                TableFuncotation.create(
+                        baseFieldNameList,
+                        createFieldValuesFromNameList("x", baseFieldNameList),
+                        Allele.create("A"),
+                        "TestDataSource5", null
+                ),
+                TableFuncotation.create(
+                        baseFieldNameList,
+                        createFieldValuesFromNameList("x", baseFieldNameList),
+                        Allele.create("AG"),
+                        "TestDataSource5", null
+                ),
+                TableFuncotation.create(
+                        baseFieldNameList,
+                        createFieldValuesFromNameList("x", baseFieldNameList),
+                        Allele.create("AT"),
+                        "TestDataSource5", null
+                )
+        );
+        final FuncotationMap twoTranscriptsFuncotationMap = FuncotationMap.createEmpty();
+        twoTranscriptsFuncotationMap.add("TX1", threeFuncotations1);
+        twoTranscriptsFuncotationMap.add("TX2", threeFuncotations2);
+
+        // In practise this should not ever happen (different transcript IDs have different fields).
+        final FuncotationMap twoTranscriptsFuncotationMapDifferentFields = FuncotationMap.createEmpty();
+        twoTranscriptsFuncotationMapDifferentFields.add("TX1", threeFuncotations1);
+        twoTranscriptsFuncotationMapDifferentFields.add("TX2", singleFuncotation);
+
+        // In practise this should not ever happen (different transcript IDs have different fields).
+        final FuncotationMap twoTranscriptsFuncotationMapSameFieldsDifferentAlleles = FuncotationMap.createEmpty();
+        twoTranscriptsFuncotationMapSameFieldsDifferentAlleles.add("TX1", threeFuncotationsSameFieldsDifferentAlleles);
+        twoTranscriptsFuncotationMapSameFieldsDifferentAlleles.add("TX2", threeFuncotationsSameFieldsDifferentAlleles);
+
+
+        return new Object[][]{
+                // NOTE: The data field names must match data sources that are checked in for this to work in an expected way:
+                {
+                        FuncotationMap.createNoTranscriptInfo(singleFuncotation),
+                        FuncotatorUtils.createLinkedHashMapFromLists(
+                                Collections.singletonList(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY),
+                                Collections.singletonList(Sets.newHashSet(baseFieldNameList4))
+                        ),
+                        true,
+                        ImmutableMap.of(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY, Sets.newHashSet("C"))
+                }, {
+                    twoTranscriptsFuncotationMapSameFieldsDifferentAlleles,
+                    FuncotatorUtils.createLinkedHashMapFromLists(
+                            Arrays.asList("TX1", "TX2"),
+                            Arrays.asList(Sets.newHashSet("FIELD1", "FIELD2"),
+                                Sets.newHashSet("FIELD1", "FIELD2"))
+                            ),
+                    true,
+                ImmutableMap.of("TX1", Sets.newHashSet("A", "AG", "AT"), "TX2", Sets.newHashSet("A", "AG", "AT"))
+                }, {
+                    twoTranscriptsFuncotationMapDifferentFields,
+                    FuncotatorUtils.createLinkedHashMapFromLists(
+                        Arrays.asList("TX1", "TX2"),
+                        Arrays.asList(Sets.newHashSet("FIELD1", "FIELD2", "FIELD3", "FIELD4", "FIELD5", "FIELD6"),
+                            Sets.newHashSet("FIELD7", "FIELD8"))
+                    ),
+                    false,
+                    ImmutableMap.of("TX1", Sets.newHashSet( "A", "AG", "AT"), "TX2", Sets.newHashSet("C"))
+                }
+            };
+    }
+
+    @Test(dataProvider="provideGetFieldNames")
+    public void testGetFieldNames(final FuncotationMap funcotationMap, final LinkedHashMap<String, Set<String>> gtFieldNamesList, final boolean gtDoAllTxAlleleCombinationsHaveTheSameFields,
+                                  final Map<String, Set<String>> gtTxIdToAllAlleles){
+        funcotationMap.getTranscriptList().forEach(txId -> Assert.assertEquals(funcotationMap.getFieldNames(txId), gtFieldNamesList.get(txId)));
+    }
+
+    @Test(dataProvider="provideGetFieldNames")
+    public void testDoAllTxAlleleCombinationsHaveTheSameFields(final FuncotationMap funcotationMap, final LinkedHashMap<String, Set<String>> gtFieldNamesList, final boolean gtDoAllTxAlleleCombinationsHaveTheSameFields,
+                                  final Map<String, Set<String>> gtTxIdToAllAlleles){
+        Assert.assertEquals(funcotationMap.doAllTxAlleleCombinationsHaveTheSameFields(), gtDoAllTxAlleleCombinationsHaveTheSameFields);
+    }
+
+    @Test(dataProvider="provideGetFieldNames")
+    public void testGetAlleles(final FuncotationMap funcotationMap, final LinkedHashMap<String, Set<String>> gtFieldNamesList, final boolean gtDoAllTxAlleleCombinationsHaveTheSameFields,
+                                  final Map<String, Set<String>> gtTxIdToAllAlleles){
+        funcotationMap.getTranscriptList().forEach(txId -> {
+            final Set<String> allelesAsString = gtTxIdToAllAlleles.get(txId);
+            final Set<Allele> alleles = allelesAsString.stream().map(a -> Allele.create(a)).collect(Collectors.toSet());
+            Assert.assertEquals(funcotationMap.getAlleles(txId), alleles);
+        });
     }
 }
