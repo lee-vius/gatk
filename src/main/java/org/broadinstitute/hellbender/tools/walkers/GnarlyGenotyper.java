@@ -1,6 +1,7 @@
 package org.broadinstitute.hellbender.tools.walkers;
 
 import com.google.common.primitives.Ints;
+import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.variant.variantcontext.*;
 import htsjdk.variant.variantcontext.writer.VariantContextWriter;
 import htsjdk.variant.vcf.*;
@@ -11,9 +12,11 @@ import org.broadinstitute.hellbender.cmdline.argumentcollections.DbsnpArgumentCo
 import org.broadinstitute.hellbender.cmdline.programgroups.ShortVariantDiscoveryProgramGroup;
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.tools.genomicsdb.GenomicsDBImport;
 import org.broadinstitute.hellbender.tools.walkers.annotator.*;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.*;
 import org.broadinstitute.hellbender.utils.GATKProtectedVariantContextUtils;
+import org.broadinstitute.hellbender.utils.IntervalUtils;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.genotyper.IndexedSampleList;
@@ -111,6 +114,13 @@ public final class GnarlyGenotyper extends VariantWalker {
             optional=true)
     private boolean onlyOutputCallsStartingInIntervals = false;
 
+    @Argument(fullName = GenomicsDBImport.MERGE_INPUT_INTERVALS_LONG_NAME,
+            shortName = GenomicsDBImport.MERGE_INPUT_INTERVALS_LONG_NAME,
+            doc = "Boolean flag to read in all data in between intervals.  Improves performance reading from GenomicsDB " +
+                    "using large lists of +intervals, as in exome sequencing, especially if GVCF data only exists for " +
+                    "specified intervals.")
+    private boolean mergeInputIntervals = false;
+
     /**
      * The rsIDs from this file are used to populate the ID column of the output.  Also, the DB INFO flag will be set
      * when appropriate. Note that dbSNP is not used in any way for the genotyping calculations themselves.
@@ -127,6 +137,21 @@ public final class GnarlyGenotyper extends VariantWalker {
     @Override
     public boolean requiresReference() {
         return true;
+    }
+
+    /**
+     * Get the largest interval per contig that contains the intervals specified on the command line.
+     * @param getIntervals intervals to be transformed
+     * @param sequenceDictionary used to validate intervals
+     * @return a list of one interval per contig spanning the input intervals after processing and validation
+     */
+    @Override
+    protected List<SimpleInterval> transformTraversalIntervals(final List<SimpleInterval> getIntervals, final SAMSequenceDictionary sequenceDictionary) {
+        if (mergeInputIntervals) {
+            return IntervalUtils.getSpanningIntervals(getIntervals, sequenceDictionary);
+        } else {
+            return getIntervals;
+        }
     }
 
     @Override
