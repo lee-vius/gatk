@@ -342,7 +342,7 @@ public final class GnarlyGenotyper extends VariantWalker {
             final Genotype calledGT;
             final GenotypeBuilder genotypeBuilder = new GenotypeBuilder(g);
             genotypeBuilder.name(name);
-            if (isGDBnoCall(g)) {
+            if (isGDBnoCall(g) || g.getAllele(0).equals(Allele.NON_REF_ALLELE) || g.getAllele(1).equals(Allele.NON_REF_ALLELE)) {
                 genotypeBuilder.alleles(GATKVariantContextUtils.noCallAlleles(ASSUMED_PLOIDY));
             }
             else if (nonRefReturned) {
