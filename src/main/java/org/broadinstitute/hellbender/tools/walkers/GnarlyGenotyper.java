@@ -14,6 +14,10 @@ import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.genomicsdb.GenomicsDBImport;
 import org.broadinstitute.hellbender.tools.walkers.annotator.*;
+import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.AS_RankSumTest;
+import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.AS_StandardAnnotation;
+import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.AS_StrandBiasTest;
+import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.ReducibleAnnotation;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.*;
 import org.broadinstitute.hellbender.utils.GATKProtectedVariantContextUtils;
 import org.broadinstitute.hellbender.utils.IntervalUtils;
@@ -26,6 +30,7 @@ import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFHeaderLines;
 import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
 import org.broadinstitute.hellbender.utils.variant.writers.GVCFWriter;
+import org.reflections.Reflections;
 
 import java.io.File;
 import java.util.*;
@@ -120,6 +125,11 @@ public final class GnarlyGenotyper extends VariantWalker {
                     "using large lists of +intervals, as in exome sequencing, especially if GVCF data only exists for " +
                     "specified intervals.")
     private boolean mergeInputIntervals = false;
+
+    @Hidden
+    @Argument(fullName = "strip-allele-specific-annotations", shortName = "strip-as", doc = "Remove raw AS values and don't calculate finalized values")
+    private boolean stripASAnnotations = false;
+
 
     /**
      * The rsIDs from this file are used to populate the ID column of the output.  Also, the DB INFO flag will be set
@@ -230,6 +240,7 @@ public final class GnarlyGenotyper extends VariantWalker {
         }
     }
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
     public void apply(VariantContext variant, ReadsContext reads, ReferenceContext ref, FeatureContext features) {
         //return early if there's no non-symbolic ALT since GDB already did the merging
@@ -256,6 +267,11 @@ public final class GnarlyGenotyper extends VariantWalker {
         double QD = QUALapprox / (double)variantDP;
         builder.attribute(GATKVCFConstants.QUAL_BY_DEPTH_KEY, QD).log10PError(QUALapprox/-10.0);
         builder.rmAttribute(GATKVCFConstants.RAW_QUAL_APPROX_KEY); //this is redundant now that it's in the QUAL field
+
+        Reflections reflections = new Reflections("org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific");
+        final Set<Class<? extends InfoFieldAnnotation>> allASAnnotations = reflections.getSubTypesOf(InfoFieldAnnotation.class);
+        allASAnnotations.addAll(reflections.getSubTypesOf(AS_StrandBiasTest.class));
+        allASAnnotations.addAll(reflections.getSubTypesOf(AS_RankSumTest.class));
 
         int[] SBsum = {0,0,0,0};
 
@@ -310,10 +326,30 @@ public final class GnarlyGenotyper extends VariantWalker {
         builder.attribute(GATKVCFConstants.FISHER_STRAND_KEY, FisherStrand.makeValueObjectForAnnotation(FisherStrand.pValueForContingencyTable(StrandBiasTest.decodeSBBS(SBsum))));
         builder.attribute(GATKVCFConstants.STRAND_ODDS_RATIO_KEY, StrandOddsRatio.formattedValue(StrandOddsRatio.calculateSOR(StrandBiasTest.decodeSBBS(SBsum))));
         builder2.attribute(GATKVCFConstants.SB_TABLE_KEY, SBsum);
+        //TODO: builder2 add all the raw AS annotations
 
         builder.genotypes(calledGenotypes);
         builder2.noGenotypes();
         builder.alleles(targetAlleles);
+
+        for (final Class c : allASAnnotations) {
+            try {
+                InfoFieldAnnotation annotation = (InfoFieldAnnotation) c.newInstance();
+                if (annotation instanceof AS_StandardAnnotation) {
+                    ReducibleAnnotation ann = (ReducibleAnnotation) annotation;
+                    if (variant.hasAttribute(ann.getRawKeyName())) {
+                        builder.rmAttribute(ann.getRawKeyName());
+                        if (!stripASAnnotations) {
+                            final Map<String, Object> finalValue = ann.finalizeRawData(builder.make(), variant);
+                            finalValue.forEach((key, value) -> builder.attribute(key, value));
+                        }
+                    }
+                }
+
+            }
+            catch (Exception e) {}
+        }
+
         builder2.alleles(targetAlleles);
 
 
