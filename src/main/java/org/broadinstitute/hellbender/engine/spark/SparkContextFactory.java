@@ -49,7 +49,7 @@ public final class SparkContextFactory {
             .put("spark.driver.maxResultSize", "0")
             .put("spark.driver.userClassPathFirst", "true")
             .put("spark.io.compression.codec", "lzf")
-            .put("spark.yarn.executor.memoryOverhead", "600")
+            .put("spark.executor.memoryOverhead", "600")
             .build();
 
     public static final Map<String, String> DEFAULT_TEST_PROPERTIES = ImmutableMap.<String, String>builder()
