@@ -1,6 +1,7 @@
 package org.broadinstitute.hellbender.utils.test;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.samtools.SAMSequenceRecord;
 import htsjdk.tribble.Feature;
@@ -345,18 +346,48 @@ public class FuncotatorTestUtils {
     /**
      * Make sure that the tsv file written exactly matches the linked hashmap.  This includes the field ordering is the same as well.
      *
-     * @param testFile Must be a readable file.
-     * @param gtOutputRecords a list of linked hashmaps.  Each hashmap representing one row in the tsv.
+     * @param testFile Must be a readable file.  Does not have to contain records.
+     * @param gtOutputRecords a list of linked hashmaps.  Each hashmap representing one row in the tsv.  Never {@code null}
+     * @param gtFieldNames List of expected column headers/fields.  This should just be {@code Lists.newArrayList(gtOutputRecord.get(...).keySet()}, but
+     *                     must be stated explicitly to handle files with no records (i.e. only have a header).
+     * @throws IOException if the file reader cannot be created.
+     */
+    public static void assertTsvFile(final File testFile, final List<LinkedHashMap<String, String>> gtOutputRecords, final List<String> gtFieldNames) throws IOException {
+        Utils.nonNull(gtOutputRecords);
+        IOUtils.assertFileIsReadable(testFile.toPath());
+        assertTsvFieldNames(testFile, gtFieldNames);
+
+        try (final TableReader<LinkedHashMap<String, String>> outputReader = createLinkedHashMapListTableReader(testFile)) {
+
+            // Check that the ordering of the column is correct and that the values are all correct.
+            assertLinkedHashMapsEqual(outputReader.toList(), gtOutputRecords);
+        }
+    }
+    /**
+     * Same as {@link FuncotatorTestUtils#assertTsvFile(File, List, List)}, but this will assume that the first
+     *  groundtruth record ({@code gtOutputRecords.get(0)}) contains the field names.
+     *
+     * @param testFile Must be a readable file.  MUST contain records.
+     * @param gtOutputRecords a list of linked hashmaps.  Each hashmap representing one row in the tsv.  Never {@code null} and cannot be empty.
      * @throws IOException if the file reader cannot be created.
      */
     public static void assertTsvFile(final File testFile, final List<LinkedHashMap<String, String>> gtOutputRecords) throws IOException {
-        Utils.nonNull(gtOutputRecords);
-        IOUtils.assertFileIsReadable(testFile.toPath());
-        final TableReader<LinkedHashMap<String, String>> outputReader = createLinkedHashMapListTableReader(testFile);
+        Utils.validateArg(gtOutputRecords.size() > 0, "Ground truth records must have at least one entry to use this method.  Use `assertTsvFile(final File testFile, final List<LinkedHashMap<String, String>> gtOutputRecords, final List<String> gtFieldNames)` instead.");
+        assertTsvFile(testFile, gtOutputRecords, Lists.newArrayList(gtOutputRecords.get(0).keySet()));
+    }
 
-        // Check that the ordering of the column is correct.
-        final List<LinkedHashMap<String,String>> outputRecords = outputReader.toList();
-        assertLinkedHashMapsEqual(outputRecords, gtOutputRecords);
+    /**
+     * Asserts that the tsv file has the exact same headers as the gtFieldNames.  Ordering too.
+     * @param testFile Must be a readable file.  Does not have to contain records.
+     * @param gtFieldNames Expected field/column names in the test file. Never {@code null}
+     */
+    private static void assertTsvFieldNames(final File testFile, final List<String> gtFieldNames)  throws IOException {
+        Utils.nonNull(gtFieldNames);
+        IOUtils.assertFileIsReadable(testFile.toPath());
+
+        try (final TableReader<LinkedHashMap<String, String>> outputReader = createLinkedHashMapListTableReader(testFile)) {
+            Assert.assertEquals(outputReader.columns().names(), gtFieldNames);
+        }
     }
 
     /**

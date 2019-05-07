@@ -83,7 +83,6 @@ public class CompositeOutputRendererUnitTest extends GATKBaseTest {
         );
         FuncotatorTestUtils.assertTsvFile(outputFile1, gt1);
         FuncotatorTestUtils.assertTsvFile(outputFile2, gt2);
-
     }
 
     // Creates a no-transcript funcotation map with one funcotation.

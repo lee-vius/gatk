@@ -247,7 +247,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
      * @return mapping of output column names to possible field names in order of priority.  Never {@code null}
      */
     @VisibleForTesting
-    static LinkedHashMap<String, List<String>> createColumnNameToAliasesMap(final Path configFile) {
+    public static LinkedHashMap<String, List<String>> createColumnNameToAliasesMap(final Path configFile) {
         final Configuration configFileContents = FuncotatorUtils.retrieveConfiguration(configFile.toFile());
         final List<String> keys = Lists.newArrayList(configFileContents.getKeys());
         return keys.stream().collect(Collectors.toMap(
@@ -312,7 +312,7 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
     }
 
     @VisibleForTesting
-    LinkedHashMap<String, String> getColumnNameToFuncotationFieldMap() {
+    public LinkedHashMap<String, String> getColumnNameToFuncotationFieldMap() {
         return columnNameToFuncotationFieldMap;
     }
 }

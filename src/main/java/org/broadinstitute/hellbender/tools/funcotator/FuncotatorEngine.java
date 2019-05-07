@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
+import com.google.common.annotations.VisibleForTesting;
 import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.tribble.util.ParsingUtils;
 import htsjdk.variant.variantcontext.VariantContext;
@@ -46,7 +47,10 @@ public final class FuncotatorEngine implements AutoCloseable {
 
     /** Obligatory logger. */
     private static final Logger logger = LogManager.getLogger(FuncotatorEngine.class);
-    public static final String SIMPLE_TSV_SEG_FILE_CONFIG = "org/broadinstitute/hellbender/tools/funcotator/simple_funcotator_seg_file.config";
+    private static final String SIMPLE_TSV_SEG_FILE_CONFIG = "org/broadinstitute/hellbender/tools/funcotator/simple_funcotator_seg_file.config";
+
+    @VisibleForTesting
+    static final String GENE_LIST_FILE_SUFFIX = ".gene_list.txt";
 
     /**
      * Information about what kinds of {@link Funcotation}s are going to be created by this {@link FuncotatorEngine}.
@@ -112,7 +116,7 @@ public final class FuncotatorEngine implements AutoCloseable {
     /**
      * @return An unmodifiable {@link List<DataSourceFuncotationFactory>} being used by this {@link FuncotatorEngine} to create {@link Funcotation}s.
      */
-    public List<DataSourceFuncotationFactory> getFuncotationFactories() {
+    List<DataSourceFuncotationFactory> getFuncotationFactories() {
         return Collections.unmodifiableList(dataSourceFactories);
     }
 
@@ -279,7 +283,7 @@ public final class FuncotatorEngine implements AutoCloseable {
                                         Paths.get(SIMPLE_TSV_SEG_FILE_CONFIG),
                                         gatkToolInstance.getVersion()),
 
-                                    new GeneListOutputRenderer(new File(funcotatorArgs.outputFile.getAbsolutePath() + ".gene_list.txt").toPath(),
+                                    new GeneListOutputRenderer(new File(funcotatorArgs.outputFile.getAbsolutePath() + GENE_LIST_FILE_SUFFIX).toPath(),
                                         unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations,
                                         funcotatorArgs.excludedFields, gatkToolInstance.getVersion())
                         ), gatkToolInstance.getVersion());

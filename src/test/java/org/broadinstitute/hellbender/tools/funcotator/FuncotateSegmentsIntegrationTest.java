@@ -14,6 +14,8 @@ import org.broadinstitute.hellbender.testutils.ArgumentsBuilder;
 import org.broadinstitute.hellbender.tools.copynumber.arguments.CopyNumberStandardArgument;
 import org.broadinstitute.hellbender.tools.copynumber.utils.annotatedinterval.AnnotatedInterval;
 import org.broadinstitute.hellbender.tools.copynumber.utils.annotatedinterval.AnnotatedIntervalCollection;
+import org.broadinstitute.hellbender.tools.funcotator.genelistoutput.GeneListOutputRenderer;
+import org.broadinstitute.hellbender.tools.funcotator.simpletsvoutput.SimpleTsvOutputRenderer;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.io.Resource;
 import org.broadinstitute.hellbender.utils.test.FuncotatorTestUtils;
@@ -25,7 +27,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -74,7 +78,16 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
         Assert.assertTrue(collection.getRecords().stream().allMatch(r -> r.getAnnotationValue("ref_allele").equals("")));
         Assert.assertTrue(collection.getRecords().stream().allMatch(r -> r.getAnnotationValue("alt_allele").equals("")));
 
+        // Check the gene list file.  It should only have headers.
+        FuncotatorTestUtils.assertTsvFile(new File(outputFile.getAbsolutePath() + FuncotatorEngine.GENE_LIST_FILE_SUFFIX),
+                Collections.emptyList(),
+                getGeneListOutputFields()
+        );
+    }
 
+    private static ArrayList<String> getGeneListOutputFields() throws IOException {
+        return Lists.newArrayList(
+                SimpleTsvOutputRenderer.createColumnNameToAliasesMap(Resource.getResourceContentsAsFile(GeneListOutputRenderer.CONFIG_RESOURCE).toPath()).keySet());
     }
 
     /**
@@ -152,6 +165,12 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
         Assert.assertEquals(collection.getRecords().stream().map(r -> r.getAnnotationValue("Segment_Call")).collect(Collectors.toList()), gtCalls);
         Assert.assertEquals(collection.getRecords().stream().map(r -> r.getAnnotationValue("Sample")).collect(Collectors.toList()), gtSamples);
         Assert.assertEquals(collection.getRecords().stream().map(r -> r.getInterval()).collect(Collectors.toList()), gtInterval);
+
+        FuncotatorTestUtils.assertTsvFile(new File(outputFile.getAbsolutePath() + FuncotatorEngine.GENE_LIST_FILE_SUFFIX),
+                Collections.emptyList(), // TODO: Fill in the ground truth here.
+                getGeneListOutputFields()
+        );
+
     }
 
     @Test

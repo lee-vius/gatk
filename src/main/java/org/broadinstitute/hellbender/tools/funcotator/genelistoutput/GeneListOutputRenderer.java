@@ -24,6 +24,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** This class can
  * - only work on segments.
@@ -46,7 +47,8 @@ import java.util.stream.Collectors;
  */
 public class GeneListOutputRenderer extends OutputRenderer {
 
-    final private static String CONFIG_RESOURCE = "org/broadinstitute/hellbender/tools/funcotator/gene_list_output.config";
+    @VisibleForTesting
+    final public static String CONFIG_RESOURCE = "org/broadinstitute/hellbender/tools/funcotator/gene_list_output.config";
     final private static String GENE_FIELD_NAME = "gene";
     final private static String EXON_FIELD_NAME = "exon";
     final private static String GENE_LIST_OUTPUT_RENDERER_DUMMY_NAME = "GENE_LIST_OUTPUT_RENDERER";
@@ -153,7 +155,7 @@ public class GeneListOutputRenderer extends OutputRenderer {
         // Add start gene and end gene to the map (with exon string).  Ignore the empty gene case, which means a segment
         //  breakpoint overlapped an IGR.
         final Pair<VariantContext,FuncotationMap> variantContextFuncotationMapPair = Pair.of(variant, txToFuncotationMap);
-        Arrays.asList(Pair.of(startGene, startExon), Pair.of(endGene, endExon)).stream()
+        Stream.of(Pair.of(startGene, startExon), Pair.of(endGene, endExon))
                 .filter(p -> !StringUtils.isEmpty(p.getLeft()))
                 .forEach(p -> geneExonToVariantFuncotationMap.put(p, variantContextFuncotationMapPair));
 
@@ -233,7 +235,7 @@ public class GeneListOutputRenderer extends OutputRenderer {
         private final Comparator<T> leftComparator = SimpleNaturalComparator.getInstance();
         private final Comparator<U> rightComparator = SimpleNaturalComparator.getInstance();
 
-        public PairedSimpleNaturalComparator() {}
+        PairedSimpleNaturalComparator() {}
 
         @Override
         public int compare(final Pair<T, U> o1, final Pair<T, U> o2) {
