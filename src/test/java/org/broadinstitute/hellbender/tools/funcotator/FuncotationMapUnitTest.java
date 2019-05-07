@@ -1,5 +1,8 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Sets;
@@ -877,5 +880,46 @@ public class FuncotationMapUnitTest extends GATKBaseTest {
             final Set<Allele> alleles = allelesAsString.stream().map(a -> Allele.create(a)).collect(Collectors.toSet());
             Assert.assertEquals(funcotationMap.getAlleles(txId), alleles);
         });
+    }
+
+    @Test
+    public void testCopy() {
+        final FuncotationMap old = FuncotationMap.createEmpty();
+        old.add("TEST_TX", TableFuncotation.create(ImmutableSortedMap.of("f1", "v1", "f2", "v2"),
+                Allele.create("C"), "TEST_DATA", null));
+
+        final FuncotationMap newFuncotationMap = FuncotationMap.create(old);
+        newFuncotationMap.add("TEST_TX2", TableFuncotation.create(ImmutableSortedMap.of("f3", "v1", "f4", "v2"),
+                Allele.create("C"), "TEST_DATA", null));
+
+        Assert.assertEquals(newFuncotationMap.getTranscriptList(), Arrays.asList("TEST_TX", "TEST_TX2"));
+        Assert.assertEquals(old.getTranscriptList(), Collections.singletonList("TEST_TX"));
+
+        Assert.assertFalse(newFuncotationMap.get("TEST_TX") == old.get("TEST_TX"));
+        Assert.assertNotEquals(newFuncotationMap, old);
+    }
+
+    @Test
+    public void testSerializationRoundTrip() {
+
+        final FuncotationMap funcotationMap = FuncotationMap.createFromGencodeFuncotations(Collections.singletonList(new GencodeFuncotationBuilder()
+                .setAnnotationTranscript(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY)
+                .build()));
+        funcotationMap.add(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY, TableFuncotation.create(ImmutableSortedMap.of("f1", "v1", "f2", "v2"),
+                        Allele.create("C"), "TEST_DATA", null));
+
+        final Kryo kryo = new Kryo();
+        FuncotationMap.performRegistrationsForMembers(kryo);
+
+        // Register all classes to be serialized.
+        kryo.register(FuncotationMap.class);
+
+        final Output output = new Output(1024, -1);
+        kryo.writeObject(output, funcotationMap);
+
+        final Input input = new Input(output.getBuffer(), 0, output.position());
+        final FuncotationMap funcotationMap2 = kryo.readObject(input, FuncotationMap.class);
+        Assert.assertEquals(funcotationMap2.getTranscriptList(), funcotationMap.getTranscriptList());
+        Assert.assertEquals(funcotationMap2.get(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY), funcotationMap.get(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY));
     }
 }

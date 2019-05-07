@@ -1,7 +1,11 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Registration;
 import com.google.common.annotations.VisibleForTesting;
 import htsjdk.variant.variantcontext.Allele;
+import htsjdk.variant.vcf.VCFHeaderLineType;
+import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
@@ -10,8 +14,10 @@ import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.TableFuncotation;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.GencodeFuncotation;
+import org.broadinstitute.hellbender.tools.funcotator.metadata.VcfFuncotationMetadata;
 import org.broadinstitute.hellbender.tools.funcotator.vcfOutput.VcfOutputRenderer;
 import org.broadinstitute.hellbender.utils.Utils;
+import org.objenesis.instantiator.ObjectInstantiator;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -308,5 +314,44 @@ public class FuncotationMap {
 
         // For each transcript-allele combo, get the fields
         return txAlleleCombos.stream().allMatch(p -> getFieldNames(p.getLeft(), p.getRight()).equals(allFields));
+    }
+
+    public static FuncotationMap create(final FuncotationMap funcotationMap) {
+        final Kryo kryo = new Kryo();
+        performRegistrationsForMembers(kryo);
+
+        // Register this class to be serialized.
+        kryo.register(FuncotationMap.class);
+
+        return kryo.copy(funcotationMap);
+    }
+
+    // HACK!  FuncotationMap should not have to register the HTSJDK classes and VcfFuncotationMetadata
+    @VisibleForTesting
+    static void performRegistrationsForMembers(final Kryo kryo) {
+        Registration registration = kryo.register(TableFuncotation.class);
+        registration.setInstantiator(new ObjectInstantiator<TableFuncotation>() {
+            public TableFuncotation newInstance() {
+                return TableFuncotation.create(new HashMap<>(), Allele.UNSPECIFIED_ALTERNATE_ALLELE, "TEMP", null);
+            }
+        });
+        registration = kryo.register(VcfFuncotationMetadata.class);
+        registration.setInstantiator(new ObjectInstantiator<VcfFuncotationMetadata>() {
+            public VcfFuncotationMetadata newInstance() {
+                return VcfFuncotationMetadata.create(new ArrayList<>());
+            }
+        });
+        registration = kryo.register(VCFInfoHeaderLine.class);
+        registration.setInstantiator(new ObjectInstantiator<VCFInfoHeaderLine>() {
+            public VCFInfoHeaderLine newInstance() {
+                return new VCFInfoHeaderLine("TMP", 2, VCFHeaderLineType.String, "");
+            }
+        });
+        registration = kryo.register(Allele.class);
+        registration.setInstantiator(new ObjectInstantiator<Allele>() {
+            public Allele newInstance() {
+                return Allele.create("TCGA");
+            }
+        });
     }
 }
