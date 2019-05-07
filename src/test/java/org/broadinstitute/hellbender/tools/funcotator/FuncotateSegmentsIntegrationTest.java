@@ -246,13 +246,18 @@ public class FuncotateSegmentsIntegrationTest extends CommandLineProgramTest {
 
         runCommandLine(arguments);
 
-        // Just read the resource config file for segments to get the column list
-        final Path configFile = Resource.getResourceContentsAsFile(SEG_RESOURCE_FILE).toPath();
+        // Just read the resource config file for segments and gene file to get the column lists
+        assertEmptyTsvFileHasCorrectHeaders(outputFile, SEG_RESOURCE_FILE);
+        assertEmptyTsvFileHasCorrectHeaders(new File(outputFile.getAbsoluteFile() + FuncotatorEngine.GENE_LIST_FILE_SUFFIX), GENE_LIST_RESOURCE_FILE);
+    }
+
+    // "Empty" means that it has no records, but does have a header.
+    private static void assertEmptyTsvFileHasCorrectHeaders(final File outputFile, final String segResourceFile) throws IOException {
+        final Path configFile = Resource.getResourceContentsAsFile(segResourceFile).toPath();
         try {
             final Configuration configFileContents = new Configurations().properties(configFile.toFile());
             final List<String> expectedColumns = Lists.newArrayList(configFileContents.getKeys());
-            final List<String> guessColumns = FuncotatorTestUtils.createLinkedHashMapListTableReader(outputFile).columns().names();
-            Assert.assertEquals(guessColumns, expectedColumns);
+            FuncotatorTestUtils.assertTsvFieldNames(outputFile, expectedColumns);
         } catch (final ConfigurationException ce) {
             throw new UserException.BadInput("Unable to read from XSV config file: " + configFile.toUri().toString(), ce);
         }

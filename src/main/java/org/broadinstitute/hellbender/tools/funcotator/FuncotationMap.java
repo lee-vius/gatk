@@ -34,7 +34,7 @@ public class FuncotationMap {
     /** Standard Logger.  */
     protected static final Logger logger = LogManager.getLogger(FuncotationMap.class);
 
-
+    //TODO: Add create method that takes in another FuncotationMap and creates a deep copy.  Then have tests.
     final private Map<String, LinkedHashSet<Funcotation>> txToFuncotations = new LinkedHashMap<>();
 
     private FuncotationMap() {}

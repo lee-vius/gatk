@@ -381,7 +381,7 @@ public class FuncotatorTestUtils {
      * @param testFile Must be a readable file.  Does not have to contain records.
      * @param gtFieldNames Expected field/column names in the test file. Never {@code null}
      */
-    private static void assertTsvFieldNames(final File testFile, final List<String> gtFieldNames)  throws IOException {
+    public static void assertTsvFieldNames(final File testFile, final List<String> gtFieldNames)  throws IOException {
         Utils.nonNull(gtFieldNames);
         IOUtils.assertFileIsReadable(testFile.toPath());
 
