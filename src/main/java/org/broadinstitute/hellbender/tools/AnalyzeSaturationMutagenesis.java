@@ -19,8 +19,10 @@ import org.broadinstitute.hellbender.tools.spark.utils.HopscotchMap;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.gcs.BucketUtils;
 import org.broadinstitute.hellbender.utils.read.GATKRead;
+import org.broadinstitute.hellbender.utils.read.SAMFileGATKReadWriter;
 
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.text.DecimalFormat;
@@ -118,8 +120,12 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
     @Argument(doc = "paired mode evaluation of variants (combine mates, when possible)", fullName = "paired-mode")
     private static boolean pairedMode = true;
 
+    @Argument(doc = "write BAM of rejected reads", fullName = "write-rejected-reads")
+    private static boolean writeRejectedReads = true;
+
     @VisibleForTesting static Reference reference;
     @VisibleForTesting static CodonTracker codonTracker; // device for turning SNVs into CodonVariations
+    @VisibleForTesting static SAMFileGATKReadWriter bamWriter;
 
     // a map of SNV sets onto number of observations of that set of variations
     private static final HopscotchMap<SNVCollectionCount, Long, SNVCollectionCount> variationCounts =
@@ -161,6 +167,8 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         "TAA", "TAC", "TAG", "TAT", "TCA", "TCC", "TCG", "TCT", "TGA", "TGC", "TGG", "TGT", "TTA", "TTC", "TTG", "TTT"
     };
 
+    static final String EXCUSE_ATTRIBUTE = "XX";
+
     @Override
     public boolean requiresReads() {
         return true;
@@ -183,6 +191,9 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         }
         reference = new Reference(ReferenceDataSource.of(referenceArguments.getReferencePath()));
         codonTracker = new CodonTracker(orfCoords, reference.getRefSeq(), logger);
+        if ( writeRejectedReads ) {
+            bamWriter = createSAMWriter(new File(outputFilePrefix + ".rejected.bam"), false);
+        }
     }
 
     @Override
@@ -194,38 +205,33 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         if ( !pairedMode ) {
             reads.forEach(read -> {
                 try {
-                    final ReadReport report = getReadReport(read);
-                    report.updateCounts(moleculeCountsUnpaired, codonTracker, variationCounts, reference);
+                    processReport(read, getReadReport(read), moleculeCountsUnpaired);
                 } catch ( final Exception e ) {
                     final String readName = read.getName();
                     throw new GATKException("Caught unexpected exception on read " +
                             readCounts.getNReads() + ": " + readName, e);
-                }
-            });
+                }});
         } else {
             read1 = null;
             reads.forEach(read -> {
                 try {
                     if ( !read.isPaired() ) {
-                        final ReadReport report = getReadReport(read);
-                        report.updateCounts(moleculeCountsUnpaired, codonTracker, variationCounts, reference);
+                        processReport(read, getReadReport(read), moleculeCountsUnpaired);
                     } else if ( read1 == null ) {
                         read1 = read;
                     } else if ( !read1.getName().equals(read.getName()) ) {
                         logger.warn("Read " + read1.getName() + " has no mate.");
-                        final ReadReport report = getReadReport(read1);
-                        report.updateCounts(moleculeCountsUnpaired, codonTracker, variationCounts, reference);
+                        processReport(read1, getReadReport(read1), moleculeCountsUnpaired);
                         read1 = read;
                     } else {
-                        updateCountsForPair(getReadReport(read1), getReadReport(read), read1.isFirstOfPair());
+                        updateCountsForPair(read1, getReadReport(read1), read, getReadReport(read));
                         read1 = null;
                     }
                 } catch ( final Exception e ) {
                     final String readName = read.getName();
                     throw new GATKException("Caught unexpected exception on read " +
                             readCounts.getNReads() + ": " + readName, e);
-                }
-            });
+                }});
             if ( read1 != null ) {
                 logger.warn("Read " + read1.getName() + " has no mate.");
                 try {
@@ -250,6 +256,7 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         writeAAFractions();
         writeReadCounts();
         writeCoverageSizeHistogram();
+        if ( bamWriter != null ) bamWriter.close();
         return super.onTraversalSuccess();
     }
 
@@ -1430,25 +1437,25 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         }
 
         // apply the report: update reference coverage, translate SNVs to codon values, and count 'em all up
-        public void updateCounts( final MoleculeCounts moleculeCounts,
-                                  final CodonTracker codonTracker,
-                                  final HopscotchMap<SNVCollectionCount, Long, SNVCollectionCount> variationCounts,
-                                  final Reference reference ) {
+        public String updateCounts( final MoleculeCounts moleculeCounts,
+                                    final CodonTracker codonTracker,
+                                    final HopscotchMap<SNVCollectionCount, Long, SNVCollectionCount> variationCounts,
+                                    final Reference reference ) {
             final List<Interval> refCoverage = getRefCoverage();
-            if ( refCoverage.isEmpty() ) return;
+            if ( refCoverage.isEmpty() ) return null;
 
             if ( snvList == null ) {
                 moleculeCounts.bumpInconsistentPairs();
-                return;
+                return "inconsistent";
             }
             if ( snvList.stream().anyMatch(
                     snv -> snv.getQuality() < minQ || "-ACGT".indexOf(snv.getVariantCall()) == -1) ) {
                 moleculeCounts.bumpNLowQualityVariant();
-                return;
+                return "lowQVar";
             }
             if ( !hasCleanFlanks(minFlankingLength, reference.getRefSeqLength()) ) {
                 moleculeCounts.bumpInsufficientFlank();
-                return;
+                return "noFlank";
             }
 
             final int coverage = reference.updateCoverage(refCoverage);
@@ -1469,6 +1476,7 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
                     variationCounts.add(newVal);
                 }
             }
+            return null;
         }
 
         private static List<Interval> combineCoverage( final ReadReport report1, final ReadReport report2 ) {
@@ -1591,14 +1599,12 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         readCounts.addBaseCalls(read.getLength());
 
         if ( read.isUnmapped() || read.isDuplicate() || read.failsVendorQualityCheck() ) {
-            readCounts.bumpNReadsUnmapped();
-            return ReadReport.NULL_REPORT;
+            return documentUnmappedRead(read);
         }
 
         Interval trim = calculateTrim(read.getBaseQualitiesNoCopy());
         if ( trim.size() == 0 ) {
-            readCounts.bumpNLowQualityReads();
-            return ReadReport.NULL_REPORT;
+            return documentLowQualityRead(read);
         }
 
         // don't process past end of fragment when fragment length < read length
@@ -1607,16 +1613,14 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
             if ( read.isReverseStrand() ) {
                 final int minStart = read.getLength() - fragmentLength;
                 if ( trim.getStart() < minStart ) {
-                    if ( trim.getEnd() <= minStart ) {
-                        readCounts.bumpNLowQualityReads();
-                        return ReadReport.NULL_REPORT;
+                    if ( trim.getEnd() - minStart <  minLength ) {
+                        return documentLowQualityRead(read);
                     }
                     trim = new Interval(minStart, trim.getEnd());
                 }
             } else if ( fragmentLength < trim.getEnd() ) {
-                if ( trim.getStart() >= fragmentLength ) {
-                    readCounts.bumpNLowQualityReads();
-                    return ReadReport.NULL_REPORT;
+                if ( fragmentLength - trim.getStart() < minLength ) {
+                    return documentLowQualityRead(read);
                 }
                 trim = new Interval(trim.getStart(), fragmentLength);
             }
@@ -1624,11 +1628,29 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
 
         final ReadReport readReport = new ReadReport(read, trim, reference.getRefSeq());
         if ( readReport.getRefCoverage().isEmpty() ) {
-            readCounts.bumpNLowQualityReads();
-        } else {
-            readCounts.bumpNReadsEvaluable();
+            return documentLowQualityRead(read);
         }
+
+        readCounts.bumpNReadsEvaluable();
         return readReport;
+    }
+
+    private static ReadReport documentUnmappedRead( final GATKRead read ) {
+        if ( bamWriter != null ) {
+            read.setAttribute(EXCUSE_ATTRIBUTE, "unmapped");
+            bamWriter.addRead(read);
+        }
+        readCounts.bumpNReadsUnmapped();
+        return ReadReport.NULL_REPORT;
+    }
+
+    private static ReadReport documentLowQualityRead( final GATKRead read ) {
+        read.setAttribute(EXCUSE_ATTRIBUTE, "lowQ");
+        if ( bamWriter != null ) {
+            bamWriter.addRead(read);
+            readCounts.bumpNLowQualityReads();
+        }
+        return ReadReport.NULL_REPORT;
     }
 
     @VisibleForTesting static Interval calculateTrim( final byte[] quals ) {
@@ -1664,27 +1686,52 @@ public final class AnalyzeSaturationMutagenesis extends GATKTool {
         return new Interval(readStart, readEnd);
     }
 
-    @VisibleForTesting static void updateCountsForPair( final ReadReport report1,
-                                                        final ReadReport report2,
-                                                        boolean read1IsFirst ) {
+    @VisibleForTesting static void updateCountsForPair( final GATKRead read1, final ReadReport report1,
+                                                        final GATKRead read2, final ReadReport report2 ) {
         if ( report1.getRefCoverage().isEmpty() ) {
-            report2.updateCounts(moleculeCountsDisjointPair, codonTracker, variationCounts, reference);
+            processReport(read2, report2, moleculeCountsDisjointPair);
         } else if ( report2.getRefCoverage().isEmpty() ) {
-            report1.updateCounts(moleculeCountsDisjointPair, codonTracker, variationCounts, reference);
+            processReport(read1, report1, moleculeCountsDisjointPair);
         } else {
             final int overlapStart = Math.max(report1.getFirstRefIndex(), report2.getFirstRefIndex());
             final int overlapEnd = Math.min(report1.getLastRefIndex(), report2.getLastRefIndex());
             if ( overlapStart <= overlapEnd ) { // if mates overlap, or are adjacent
                 final ReadReport combinedReport = new ReadReport(report1, report2);
-                combinedReport.updateCounts(moleculeCountsOverlappingPair, codonTracker, variationCounts, reference);
-            } else {
-                if ( read1IsFirst ) {
-                    report1.updateCounts(moleculeCountsDisjointPair, codonTracker, variationCounts, reference);
+                final String excuse =
+                    combinedReport.updateCounts(moleculeCountsOverlappingPair, codonTracker, variationCounts, reference);
+                if ( excuse != null && bamWriter != null ) {
+                    read1.setAttribute(EXCUSE_ATTRIBUTE, excuse);
+                    bamWriter.addRead(read1);
+                    read2.setAttribute(EXCUSE_ATTRIBUTE, excuse);
+                    bamWriter.addRead(read2);
+                }
+            } else { // mates are disjoint
+                final String ignoredMate = "ignoredMate";
+                if ( read1.isFirstOfPair() ) {
+                    processReport(read1, report1, moleculeCountsDisjointPair);
+                    if ( bamWriter != null ) {
+                        read2.setAttribute(EXCUSE_ATTRIBUTE, ignoredMate);
+                        bamWriter.addRead(read2);
+                    }
                 } else {
-                    report2.updateCounts(moleculeCountsDisjointPair, codonTracker, variationCounts, reference);
+                    processReport(read2, report2, moleculeCountsDisjointPair);
+                    if ( bamWriter != null ) {
+                        read1.setAttribute(EXCUSE_ATTRIBUTE, ignoredMate);
+                        bamWriter.addRead(read1);
+                    }
                 }
                 moleculeCountsDisjointPair.bumpInconsistentPairs();
             }
+        }
+    }
+
+    private static void processReport( final GATKRead read,
+                                       final ReadReport readReport,
+                                       final MoleculeCounts moleculeCounts ) {
+        final String excuse = readReport.updateCounts(moleculeCounts, codonTracker, variationCounts, reference);
+        if ( excuse != null && bamWriter != null ) {
+            read.setAttribute(EXCUSE_ATTRIBUTE, excuse);
+            bamWriter.addRead(read);
         }
     }
 }
