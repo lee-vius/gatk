@@ -154,9 +154,7 @@ public class GeneListOutputRenderer extends OutputRenderer {
 
         // Add start gene and end gene to the map (with exon string).  Ignore the empty gene case, which means a segment
         //  breakpoint overlapped an IGR.
-
-        // TODO: Make the value a copy of the FuncotationMap.
-        final Pair<VariantContext,FuncotationMap> variantContextFuncotationMapPair = Pair.of(variant, txToFuncotationMap);
+        final Pair<VariantContext,FuncotationMap> variantContextFuncotationMapPair = Pair.of(variant, FuncotationMap.create(txToFuncotationMap));
         Stream.of(Pair.of(startGene, startExon), Pair.of(endGene, endExon))
                 .filter(p -> !StringUtils.isEmpty(p.getLeft()))
                 .forEach(p -> geneExonToVariantFuncotationMap.put(p, variantContextFuncotationMapPair));
@@ -176,7 +174,6 @@ public class GeneListOutputRenderer extends OutputRenderer {
 
             final FuncotationMap funcotationMap = geneExonToVariantFuncotationMap.get(geneExon).getRight();
 
-            // TODO: There is a bug here.  Need to make a copy of the funcotation map here or when it is added to the map.
             final Allele altAllele = funcotationMap.get(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY).get(0).getAltAllele();
             final Funcotation newFuncotation = createGeneExonFuncotation(geneExon.getLeft(), geneExon.getRight(), altAllele);
 

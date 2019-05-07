@@ -326,7 +326,8 @@ public class FuncotationMap {
         return kryo.copy(funcotationMap);
     }
 
-    // HACK!  FuncotationMap should not have to register the HTSJDK classes and VcfFuncotationMetadata
+    // HACK!  FuncotationMap should not have to register the HTSJDK classes and VcfFuncotationMetadata.  This is
+    //  only being done to allow a simple(?) copy of FuncotationMap.
     @VisibleForTesting
     static void performRegistrationsForMembers(final Kryo kryo) {
         Registration registration = kryo.register(TableFuncotation.class);

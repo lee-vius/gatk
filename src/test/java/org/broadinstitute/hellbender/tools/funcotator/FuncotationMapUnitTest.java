@@ -900,6 +900,25 @@ public class FuncotationMapUnitTest extends GATKBaseTest {
     }
 
     @Test
+    public void testCopyWithGencode() {
+        final FuncotationMap old = FuncotationMap.createFromGencodeFuncotations(Collections.singletonList(new GencodeFuncotationBuilder()
+                .setAnnotationTranscript("TEST_TX")
+                .build()));
+        old.add("TEST_TX", TableFuncotation.create(ImmutableSortedMap.of("f1", "v1", "f2", "v2"),
+                Allele.create("C"), "TEST_DATA", null));
+
+        final FuncotationMap newFuncotationMap = FuncotationMap.create(old);
+        newFuncotationMap.add("TEST_TX2", TableFuncotation.create(ImmutableSortedMap.of("f3", "v1", "f4", "v2"),
+                Allele.create("C"), "TEST_DATA", null));
+
+        Assert.assertEquals(newFuncotationMap.getTranscriptList(), Arrays.asList("TEST_TX", "TEST_TX2"));
+        Assert.assertEquals(old.getTranscriptList(), Collections.singletonList("TEST_TX"));
+
+        Assert.assertFalse(newFuncotationMap.get("TEST_TX") == old.get("TEST_TX"));
+        Assert.assertNotEquals(newFuncotationMap, old);
+    }
+
+    @Test
     public void testSerializationRoundTrip() {
 
         final FuncotationMap funcotationMap = FuncotationMap.createFromGencodeFuncotations(Collections.singletonList(new GencodeFuncotationBuilder()
