@@ -168,7 +168,6 @@ public class FuncotationMap {
         addWithoutGencodeCheck(txId, funcotation);
     }
 
-
     /**
      * Get the list of transcripts in order.
      *
@@ -354,5 +353,20 @@ public class FuncotationMap {
                 return Allele.create("TCGA");
             }
         });
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        FuncotationMap that = (FuncotationMap) o;
+
+        return txToFuncotations.equals(that.txToFuncotations);
+    }
+
+    @Override
+    public int hashCode() {
+        return txToFuncotations.hashCode();
     }
 }
