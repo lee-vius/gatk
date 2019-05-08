@@ -2067,7 +2067,7 @@ public final class FuncotatorUtils {
      * @return Boolean whether the given variant context represent a copy number segment.
      */
     public static boolean isSegmentVariantContext(final VariantContext vc) {
-        org.broadinstitute.barclay.utils.Utils.nonNull(vc);
+        Utils.nonNull(vc);
         for (final Allele a: vc.getAlternateAlleles()) {
             final String representation = a.getDisplayString();
             if (Stream.of(SimpleSVType.SupportedType.values()).anyMatch(s -> SimpleSVType.createBracketedSymbAlleleString(s.toString()).equals(representation))) {

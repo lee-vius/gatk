@@ -281,7 +281,7 @@ public final class FuncotatorEngine implements AutoCloseable {
                                         unaccountedForDefaultAnnotations,
                                         unaccountedForOverrideAnnotations, funcotatorArgs.excludedFields,
                                         Paths.get(SIMPLE_TSV_SEG_FILE_CONFIG),
-                                        gatkToolInstance.getVersion()),
+                                        gatkToolInstance.getVersion(), true),
 
                                     new GeneListOutputRenderer(new File(funcotatorArgs.outputFile.getAbsolutePath() + GENE_LIST_FILE_SUFFIX).toPath(),
                                         unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations,

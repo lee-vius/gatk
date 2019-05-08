@@ -33,12 +33,12 @@ public class CompositeOutputRendererUnitTest extends GATKBaseTest {
         final SimpleInterval interval = new SimpleInterval("3", 1000000, 2000000);
         final SimpleTsvOutputRenderer renderer1 = SimpleTsvOutputRenderer.createFromFile(outputFile1.toPath(),
                 new LinkedHashMap<>(),
-                new LinkedHashMap<>(), new HashSet<>(), Paths.get(SEG_CONFIG_FILE), "TEST");
+                new LinkedHashMap<>(), new HashSet<>(), Paths.get(SEG_CONFIG_FILE), "TEST", true);
 
         final SimpleTsvOutputRenderer renderer2 = SimpleTsvOutputRenderer.createFromFile(outputFile2.toPath(),
                 new LinkedHashMap<>(),
                 FuncotatorUtils.createLinkedHashMapFromLists(Arrays.asList("FIELD1", "FIELD2"), Arrays.asList("VAL1", "VAL2")),
-                new HashSet<>(Collections.singletonList("foo2")), Paths.get(SEG_CONFIG_FILE), "TEST");
+                new HashSet<>(Collections.singletonList("foo2")), Paths.get(SEG_CONFIG_FILE), "TEST", true);
 
         final OutputRenderer compositeOutputRenderer = new CompositeOutputRenderer(Arrays.asList(renderer1, renderer2), "TEST_TOOL");
 

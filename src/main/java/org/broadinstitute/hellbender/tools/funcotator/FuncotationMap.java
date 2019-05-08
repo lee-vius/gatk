@@ -84,8 +84,8 @@ public class FuncotationMap {
                 .map(f -> f.getField(fieldName))
                 .collect(Collectors.toSet());
         if (values.size() > 1) {
-            throw new UserException.BadInput("Found more than one unique value for " + transcriptId + ", "
-                    + allele + ", " + fieldName + ": " + values.stream().collect(Collectors.joining(", ")));
+            throw new UserException.BadInput("Found more than one unique value for the tuple {" + transcriptId + ", "
+                    + allele + ", " + fieldName + "}: " + values.stream().collect(Collectors.joining(", ")));
         }
         if (values.size() == 0) {
             return null;

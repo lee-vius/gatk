@@ -92,9 +92,12 @@ public class GeneListOutputRenderer extends OutputRenderer {
         IOUtil.assertFileIsWritable(outputFilePath.toFile());
 
         geneExonToVariantFuncotationMap = new TreeMap<>(new PairedSimpleNaturalComparator<>());
+
+        // When initializing the simpleoutput renderer, make sure that extra funcotation fields not explicitly in the
+        //  configuration are not written.
         simpleTsvOutputRenderer = SimpleTsvOutputRenderer.createFromResource(outputFilePath,
             unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations, excludedOutputFields,
-            Paths.get(CONFIG_RESOURCE), toolVersion);
+            Paths.get(CONFIG_RESOURCE), toolVersion, false);
 
         // Cache patterns to determine which field
         gencodeGenesFieldPattern = Pattern.compile(GENCODE_GENES_FIELD_PATTERN_STRING);
@@ -130,9 +133,10 @@ public class GeneListOutputRenderer extends OutputRenderer {
 
         // For each gene in the genes field, add an entry in the map.
         // HACK: This is more difficult since we do not actually know what the genes et al field names actually are.
+        final String genesFieldName = determineGencodeFieldName(txToFuncotationMap, FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY, gencodeGenesFieldPattern);
         final List<String> genes = Arrays.asList(StringUtils.split(txToFuncotationMap.getFieldValue(
                 FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY,
-                determineGencodeFieldName(txToFuncotationMap, FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY, gencodeGenesFieldPattern),
+                genesFieldName,
                 txToFuncotationMap.getAlleles(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY).iterator().next())
                 ,","));
         final String startGene = txToFuncotationMap.getFieldValue(
@@ -152,18 +156,18 @@ public class GeneListOutputRenderer extends OutputRenderer {
                 determineGencodeFieldName(txToFuncotationMap, FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY, gencodeEndExonFieldPattern),
                 txToFuncotationMap.getAlleles(FuncotationMap.NO_TRANSCRIPT_AVAILABLE_KEY).iterator().next());
 
+        // For the next two steps make sure to copy the funcotation maps, since we may have to alter them downstream.
         // Add start gene and end gene to the map (with exon string).  Ignore the empty gene case, which means a segment
         //  breakpoint overlapped an IGR.
-        final Pair<VariantContext,FuncotationMap> variantContextFuncotationMapPair = Pair.of(variant, FuncotationMap.create(txToFuncotationMap));
         Stream.of(Pair.of(startGene, startExon), Pair.of(endGene, endExon))
                 .filter(p -> !StringUtils.isEmpty(p.getLeft()))
-                .forEach(p -> geneExonToVariantFuncotationMap.put(p, variantContextFuncotationMapPair));
+                .forEach(p -> geneExonToVariantFuncotationMap.put(p, Pair.of(variant, FuncotationMap.create(txToFuncotationMap))));
 
         // Add each gene to the internal map, making sure not to re-add the start and end gene.  Also, do not include
         //  blank genes
         genes.stream().filter(g -> !g.equals(startGene) && !g.equals(endGene))
                 .filter(g -> !StringUtils.isEmpty(g))
-                .forEach(g -> geneExonToVariantFuncotationMap.put(Pair.of(g, ""), variantContextFuncotationMapPair));
+                .forEach(g -> geneExonToVariantFuncotationMap.put(Pair.of(g, ""), Pair.of(variant, FuncotationMap.create(txToFuncotationMap))));
     }
 
     private void flushAllGenes() {

@@ -62,12 +62,14 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
 
     private final AliasProvider aliasProvider;
 
+    private boolean isWriteColumnsNotInConfig;
+
     @VisibleForTesting
     SimpleTsvOutputRenderer(final Path outputFilePath,
                                    final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
                                    final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
                                    final Set<String> excludedOutputFields, final LinkedHashMap<String, List<String>> columnNameToAliasesMap,
-                                   final String toolVersion) {
+                                   final String toolVersion, final boolean isWriteColumnsNotInConfig) {
         super(toolVersion);
 
         Utils.nonNull(outputFilePath);
@@ -84,6 +86,8 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
 
         this.unaccountedForDefaultAnnotations = unaccountedForDefaultAnnotations;
         this.unaccountedForOverrideAnnotations = unaccountedForOverrideAnnotations;
+
+        this.isWriteColumnsNotInConfig = isWriteColumnsNotInConfig;
     }
 
     // This method uses the fact that the keys of the input are ordered.
@@ -165,10 +169,12 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
 
 
         // Now lets find the columns that are left over and tack those on with their base name.
-        final Set<String> allFuncotationFields = funcotationMap.getFieldNames(txId);
-        final Set<String> usedFuncotationFields =  new HashSet<>(result.values());
-        getLeftoverStrings(allFuncotationFields, usedFuncotationFields).forEach(c -> result.put(c, c));
-
+        //  But only if this SimpleTsvWriter was configured to do so.
+        if (isWriteColumnsNotInConfig) {
+            final Set<String> allFuncotationFields = funcotationMap.getFieldNames(txId);
+            final Set<String> usedFuncotationFields = new HashSet<>(result.values());
+            getLeftoverStrings(allFuncotationFields, usedFuncotationFields).forEach(c -> result.put(c, c));
+        }
 
         // Make a placeholder for leftover default values
         getLeftoverStrings(unaccountedForDefaultAnnotations.keySet(), new HashSet<>(result.keySet()))
@@ -270,36 +276,40 @@ public class SimpleTsvOutputRenderer extends OutputRenderer {
      *                   list of possible aliases.  Note that the list of the keys is the same order that will be seen
      *                   in the output.
      * @param toolVersion The version number of the tool used to produce the VCF file.  Never {@code null}
+     * @param isWriteColumnsNotInConfig Whether to write funcotation fields that were present but had no alias,
+     *                                  no default value, nor override value.
      */
     public static SimpleTsvOutputRenderer createFromFile(final Path outputFilePath,
                                                          final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
                                                          final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
                                                          final Set<String> excludedOutputFields, final Path configPath,
-                                                         final String toolVersion) {
+                                                         final String toolVersion, final boolean isWriteColumnsNotInConfig) {
         return new SimpleTsvOutputRenderer(outputFilePath, unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations,
-                excludedOutputFields, createColumnNameToAliasesMap(configPath), toolVersion);
+                excludedOutputFields, createColumnNameToAliasesMap(configPath), toolVersion, isWriteColumnsNotInConfig);
     }
 
     /**
      * Use when loading the config file from the jar.
      *
-     * See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
+     * See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String, boolean)}
      *
-     * @param outputFilePath See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
-     * @param unaccountedForDefaultAnnotations See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
-     * @param unaccountedForOverrideAnnotations See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
-     * @param excludedOutputFields See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
-     * @param resourcePath Configuration file (as a Resource).  See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
-     * @param toolVersion See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String)}
-     */
+     * @param outputFilePath See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String, boolean)}
+     * @param unaccountedForDefaultAnnotations See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String, boolean)}
+     * @param unaccountedForOverrideAnnotations See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String, boolean)}
+     * @param excludedOutputFields See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String, boolean)}
+     * @param resourcePath Configuration file (as a Resource).  See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String, boolean)}
+     * @param toolVersion See {@link SimpleTsvOutputRenderer#createFromFile(Path, LinkedHashMap, LinkedHashMap, Set, Path, String, boolean)}
+     * @param isWriteColumnsNotInConfig Whether to write funcotation fields that were present but had no alias,
+     *                                  no default value, nor override value.      */
     public static SimpleTsvOutputRenderer createFromResource(final Path outputFilePath,
                                                          final LinkedHashMap<String, String> unaccountedForDefaultAnnotations,
                                                          final LinkedHashMap<String, String> unaccountedForOverrideAnnotations,
                                                          final Set<String> excludedOutputFields, final Path resourcePath,
-                                                         final String toolVersion) {
+                                                         final String toolVersion, final boolean isWriteColumnsNotInConfig) {
         try {
             return new SimpleTsvOutputRenderer(outputFilePath, unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations,
-                    excludedOutputFields, createColumnNameToAliasesMap(Resource.getResourceContentsAsFile(resourcePath.toString()).toPath()), toolVersion);
+                    excludedOutputFields, createColumnNameToAliasesMap(Resource.getResourceContentsAsFile(resourcePath.toString()).toPath()),
+                    toolVersion, isWriteColumnsNotInConfig);
         } catch (final IOException ioe) {
             throw new GATKException.ShouldNeverReachHereException("Could not read config file: " + resourcePath,
                     ioe);

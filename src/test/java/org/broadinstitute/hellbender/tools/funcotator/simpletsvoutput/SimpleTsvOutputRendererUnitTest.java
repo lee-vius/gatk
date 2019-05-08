@@ -38,13 +38,15 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
         };
     }
 
+    // TODO: Add tests for writing columns without an alias.
+
     @Test(dataProvider = "provideForSimpleSegFileWriting")
     public void testSimpleSegFileWriting(final VariantContext segVC) throws IOException {
         final File outputFile = File.createTempFile("simpleSegFileWriting", ".seg");
 
         final SimpleTsvOutputRenderer renderer = SimpleTsvOutputRenderer.createFromFile(outputFile.toPath(),
                 new LinkedHashMap<>(),
-                new LinkedHashMap<>(), new HashSet<>(), Paths.get(SEG_CONFIG_FILE), "TEST");
+                new LinkedHashMap<>(), new HashSet<>(), Paths.get(SEG_CONFIG_FILE), "TEST", true);
 
         final List<String> fieldNames = Arrays.asList("Gencode_19_genes", "foo1", "foobar2", "TEST3", "foo3!!");
         final List<String> fieldValues = Arrays.asList("GENE1,GENE2", "stuff1", "stuff2", "stuff3", "stuff4");
@@ -240,7 +242,7 @@ public class SimpleTsvOutputRendererUnitTest extends GATKBaseTest {
         final File outputFile = File.createTempFile("testAliasing", ".seg");
         final SimpleTsvOutputRenderer simpleTsvOutputRenderer = new SimpleTsvOutputRenderer(outputFile.toPath(),
                 unaccountedForDefaultAnnotations, unaccountedForOverrideAnnotations, excludedOutputFields,
-                columnNameToAliasesMap, "TESTING_VERSION");
+                columnNameToAliasesMap, "TESTING_VERSION", true);
 
         // You must write one record since SimpleTsvOutputRenderer lazy loads the writer.
         simpleTsvOutputRenderer.write(segVC, funcotationMap);
