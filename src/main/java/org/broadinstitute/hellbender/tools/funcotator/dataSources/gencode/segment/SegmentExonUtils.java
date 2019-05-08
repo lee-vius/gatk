@@ -6,6 +6,7 @@ import htsjdk.samtools.util.Locatable;
 import htsjdk.tribble.annotation.Strand;
 import org.broadinstitute.hellbender.utils.IntervalUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfExonFeature;
 import org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfTranscriptFeature;
 
@@ -18,13 +19,25 @@ public class SegmentExonUtils {
     private final static int NO_EXON_OVERLAP = -1;
 
     /**
+     * @param transcript Never {@code null}
+     * @param segment Genomic region to determine which exons are covered in the transcript.  Never {@code null}
+     * @return Instance of {@link SegmentExonOverlaps}.  A typical value will be a number appended to a "-" or a "+".
+     *   The exon numbers are 0-based.  "-" if it covers upstream exons (considering coding direction -- i.e. previous exons
+     *   are higher genomic coordinates on negative strand transcripts) and "+" for downstream exons.
+     *   For example:
+     *   - "6+" would be sixth exon and above.  This would indicate downstream exons (higher genomic
+     *     coordinates on positive coding directions and lower genomic coordinates when negative coding) are covered by
+     *     the segment.
+     *   - "" indicates that the endpoints of the segment do not cover any transcript exons.  So either the entire
+     *      transcript is covered or none of the transcript is covered.
      *
-     * TODO: Docs
-     * @param transcript
-     * @param segment
-     * @return
+     *   Note that this will return the first exon covered.  So, this will yield a non-blank value when a segment
+     *    breakpoint is in an intron.
      */
     public static SegmentExonOverlaps determineSegmentExonPosition(final GencodeGtfTranscriptFeature transcript, final Locatable segment) {
+
+        Utils.nonNull(transcript);
+        Utils.nonNull(segment);
 
         final String NOT_IN_TRANSCRIPT = "";
 
